@@ -2,11 +2,54 @@
 #include "sqlite3.h"
 #include "sqlite-vec.h"
 
+#include <curl/curl.h>
+
 #include <assert.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
 
 int main(int argc, char *argv[]) {
+    char *api_key = getenv("OPENAI_API_KEY");
+    assert(api_key != NULL);
+
+    CURLcode result = curl_global_init(CURL_GLOBAL_ALL);
+    assert(result == CURLE_OK);
+
+    CURL *easy_handle = curl_easy_init();
+    if (easy_handle) {
+        result = curl_easy_setopt(easy_handle, CURLOPT_URL, "https://api.openai.com/v1/models");
+        assert(result == CURLE_OK);
+
+        result = curl_easy_setopt(easy_handle, CURLOPT_VERBOSE, 1L);
+        assert(result == CURLE_OK);
+
+        struct curl_slist *list = NULL;
+
+        char buffer[512];
+        int chars_written = snprintf(buffer, ARRAY_SIZE(buffer), "Authorization: Bearer %s", api_key);
+        assert(chars_written < ARRAY_SIZE(buffer));
+        assert(chars_written >= 0);
+
+        list = curl_slist_append(list, buffer);
+        assert(list != NULL);
+
+        result = curl_easy_setopt(easy_handle, CURLOPT_HTTPHEADER, list);
+
+        result = curl_easy_perform(easy_handle);
+        if (result != CURLE_OK)
+            fprintf(stderr, "error: %s\n", curl_easy_strerror(result));
+
+        curl_slist_free_all(list);
+
+        curl_easy_cleanup(easy_handle);
+    }
+
+    curl_global_cleanup();
+
     int rc = SQLITE_OK;
     sqlite3 *db;
     sqlite3_stmt *stmt;
